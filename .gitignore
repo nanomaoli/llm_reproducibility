@@ -4,6 +4,7 @@
 *.log
 **/__pycache__/
 outputs/
+scoring_results/
 sh/my*
 sh/test*
 vllm_version_test/test*

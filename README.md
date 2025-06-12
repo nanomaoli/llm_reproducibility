@@ -67,6 +67,7 @@ LayerCast uses `float32` for computation, so `--dtype` should be set accordingly
 ```
 Model responses and logprobs will be saved to `outputs/vllm_layercast/{exp_name}/{model}`. 
 Scoring results will appear in `scoring_results/greedy_layercast`.
+
 *Example:*
 ```python
 CUDA_VISIBLE_DEVICES=0,1 python eval_layercast.py --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
@@ -91,8 +92,9 @@ CUDA_VISIBLE_DEVICES=0,1 python eval_layercast.py --model deepseek-ai/DeepSeek-R
     --passk [n] \
     --exp_name [NAME_OF_THE_RUN]
 ```
-Model responses and logprobs will be saved to `outputs/vllm_passk/{exp_name}/{model}`.
+Model responses will be saved to `outputs/vllm_passk/{exp_name}/{model}`.
 Scoring results will appear in `scoring_results/random_passk`.
+
 *Example:*
 ```python
 CUDA_VISIBLE_DEVICES=0,1 python eval_passk.py --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
