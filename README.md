@@ -1,8 +1,12 @@
-# Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning
+# Challenges and Solutions of LLM Reproducibility
+
+Codebase of [Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning](https://arxiv.org/abs/2506.06395)
 
 ## News
 - [2025.06.18]: Our paper has been released on [arxiv](https://arxiv.org/abs/2506.09501). Feel free to ⭐UPVOTE in [huggingface](https://huggingface.co/papers/2506.09501)
 - [2025.05.24]: "There is an extraordinary 'reproducibility crisis' in the sciences" –[J.D. Vance](https://x.com/JDVance/status/1926369663929249883)
+
+<br>
 
 <p align="center">
   <img src="figures/reproduciblellm_fig1.png" width="800"/>
@@ -13,7 +17,7 @@
 </p>
 
 ## Overview
-This repository contains the official implementation of **"Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning"**, published as a preprint on [arXiv](https://arxiv.org/abs/2506.09501). We present the first systematic study on the fragility of LLM reproducibility under different system configurations. Our work identifies reduced numerical precision as a key source of divergence, and introduces LayerCast, a hybrid-precision inference pipeline that balances memory efficiency with numerical stability. 
+This repository contains the official implementation of **"Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning"**. We present the first systematic study on the fragility of LLM reproducibility under different system configurations. Our work identifies reduced numerical precision as a key source of divergence, and introduces LayerCast, a hybrid-precision inference pipeline that balances memory efficiency with numerical stability. 
 
 ## Environment Setup
 
