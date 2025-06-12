@@ -1,0 +1,13 @@
+handler: math
+dataset_path: "HuggingFaceH4/MATH-500"  # repo ID in huggingface
+dataset_subset: null # which subset on huggingface
+question_key: problem
+answer_key: answer
+dataset_split: test
+templating_parameters: 
+  template: "Return your final response within \\boxed{{}}. {problem}"
+# optional. Not supported yet. 
+# fewshot_config:
+#   - question: ...
+#   - target:  ...
+# num_fewshot: 0
