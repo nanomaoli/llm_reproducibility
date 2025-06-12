@@ -1,6 +1,8 @@
 # Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning
-## Overview
-This repository contains the official implementation of **"Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning"**, published as a preprint on [arXiv](https://arxiv.org/abs/2506.09501). We present the first systematic study on the fragility of LLM reproducibility under different system configurations. Our work identifies reduced numerical precision as a key source of divergence, and introduces LayerCast, a hybrid-precision inference pipeline that balances memory efficiency with numerical stability. 
+
+## News
+- [2025.06.18]: Our paper has been released on [arxiv](https://arxiv.org/abs/2506.09501). Feel free to ⭐UPVOTE in [huggingface](https://huggingface.co/papers/2506.09501)
+- [2025.05.24]: "There is an extraordinary 'reproducibility crisis' in the sciences" –[J.D. Vance](https://x.com/JDVance/status/1926369663929249883)
 
 <p align="center">
   <img src="figures/reproduciblellm_fig1.png" width="800"/>
@@ -9,6 +11,9 @@ This repository contains the official implementation of **"Give Me FP32 or Give 
 <p align="center">
   <i><b>Figure 1.</b> <b>Left:</b> Under BF16 precision and greedy decoding, the model's output can vary significantly depending on factors such as GPU count, evaluation batch size, and GPU hardware version. <b>Right:</b> For example, changes in evaluation batch size alone can lead to noticeable differences in responses, which is often ignored and not standardized by evaluation benchmarks.</i>
 </p>
+
+## Overview
+This repository contains the official implementation of **"Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning"**, published as a preprint on [arXiv](https://arxiv.org/abs/2506.09501). We present the first systematic study on the fragility of LLM reproducibility under different system configurations. Our work identifies reduced numerical precision as a key source of divergence, and introduces LayerCast, a hybrid-precision inference pipeline that balances memory efficiency with numerical stability. 
 
 ## Environment Setup
 
@@ -105,6 +110,22 @@ CUDA_VISIBLE_DEVICES=0,1 python eval_passk.py --model deepseek-ai/DeepSeek-R1-Di
     --max_tokens 32768 \
     --passk 4 \
     --exp_name 2a100_pass4_math500_bf16_bs32
+```
+
+## Citation
+
+If you find our work interesting or helpful, please kindly cite our paper.
+
+```bibtex
+@misc{yuan2025fp32deathchallengessolutions,
+      title={Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning}, 
+      author={Jiayi Yuan and Hao Li and Xinheng Ding and Wenya Xie and Yu-Jhe Li and Wentian Zhao and Kun Wan and Jing Shi and Xia Hu and Zirui Liu},
+      year={2025},
+      eprint={2506.09501},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2506.09501}, 
+}
 ```
 
 ## References
