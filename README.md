@@ -4,7 +4,6 @@ Codebase of [Give Me FP32 or Give Me Death? Challenges and Solutions for Reprodu
 
 ## News
 - [2025.06.18]: Our paper has been released on [arxiv](https://arxiv.org/abs/2506.09501). Feel free to ⭐UPVOTE in [huggingface](https://huggingface.co/papers/2506.09501)
-- [2025.05.24]: "There is an extraordinary 'reproducibility crisis' in the sciences" –[J.D. Vance](https://x.com/JDVance/status/1926369663929249883)
 
 <br>
 
