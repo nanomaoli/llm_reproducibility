@@ -20,8 +20,9 @@ from vllm.inputs import TextPrompt, TokensPrompt
 from prompt_util.prompt_template import make_conversation_from_contents
 from evals.tasks import TASK_HANDLER_MAP, TASK_NAMES_TO_YAML, TaskConfig
 
-from patch_vllm import patch_qwen2_vllm
+from patch_vllm import patch_qwen2_vllm, patch_llama_vllm
 patch_qwen2_vllm()
+patch_llama_vllm()
 
 logger = logging.getLogger(__name__)
 
