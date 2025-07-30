@@ -13,6 +13,8 @@ from vllm.utils import (STR_DTYPE_TO_TORCH_DTYPE, LayerBlockType,
                         get_dtype_size, is_pin_memory_available)
 from vllm.distributed import get_pp_group
 from vllm.model_executor.models.qwen2 import Qwen2Model, LogitsProcessor, get_sampler, ParallelLMHead, PPMissingLayer, maybe_prefix
+from vllm.model_executor.models.llama import LlamaModel, LlamaForCausalLM, LlamaAttention
+
 from vllm.attention import Attention
 # from vllm.v1.worker.gpu_model_runner
 import sys
@@ -237,3 +239,85 @@ def patch_qwen2_vllm():
     RotaryEmbedding.forward_cuda = our_fp32_rope_forward_cuda
     Qwen2Attention.forward = our_attn_forward
     print("Patched vLLM: Model loaded in fp32, linear weights stored in fp16, all computations in fp32")
+
+def patch_llama_vllm():
+    """Patch Llama models for fp32 computation with fp16/bfloat16 storage."""
+    import os
+    os.environ["VLLM_ATTENTION_BACKEND"] = "XFORMERS"  # FLASHINFER
+    
+    patch_cache_engine()
+    
+    def new_llama_lm_init(self, *, vllm_config, prefix: str = ""):
+        torch.nn.Module.__init__(self)
+        config = vllm_config.model_config.hf_config
+        quant_config = vllm_config.quant_config
+        lora_config = vllm_config.lora_config
+
+        self.config = config
+        self.lora_config = lora_config
+        self.quant_config = quant_config
+        
+        self.model = LlamaModel(vllm_config=vllm_config,
+                                prefix=maybe_prefix(prefix, "model"))
+
+        if get_pp_group().is_last_rank:
+            if config.tie_word_embeddings:
+                self.lm_head = self.model.embed_tokens
+            else:
+                self.lm_head = ParallelLMHead(config.vocab_size,
+                                              config.hidden_size,
+                                              quant_config=quant_config,
+                                              prefix=maybe_prefix(
+                                                  prefix, "lm_head"))
+        else:
+            self.lm_head = PPMissingLayer()
+
+        # Convert linear weights to bfloat16 for storage
+        convert_linear_weights_to_bfloat16(self.model)
+        if not isinstance(self.lm_head, PPMissingLayer):
+            convert_linear_weights_to_bfloat16(self.lm_head)
+
+        self.logits_processor = LogitsProcessor(config.vocab_size, scale=1.2)
+        self.sampler = get_sampler()
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors)
+
+    LlamaForCausalLM.__init__ = new_llama_lm_init
+
+    # Store the original __init__
+    original_llama_attn_init = LlamaAttention.__init__
+    def new_llama_attn_init(self, *args, **kwargs):
+        # Call the original init first
+        original_llama_attn_init(self, *args, **kwargs)
+        # Override rotary embedding to use fp32
+        self.rotary_emb = get_rope(
+            self.head_dim,
+            rotary_dim=self.head_dim,
+            max_position=kwargs.get('max_position', 4096),  # Default for Llama
+            base=self.rope_theta,
+            rope_scaling=kwargs.get('rope_scaling'),
+            dtype=torch.float32  # RoPE computation in fp32
+        )
+    
+    LlamaAttention.__init__ = new_llama_attn_init
+    
+    # Create a forward method for LlamaAttention
+    def our_llama_attn_forward(
+        self,
+        positions: torch.Tensor,
+        hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
+        # Input is already in fp32 from previous layer
+        qkv, _ = self.qkv_proj(hidden_states)
+        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        q, k = self.rotary_emb(positions, q, k)
+        attn_output = self.attn(q, k, v)
+        output, _ = self.o_proj(attn_output)
+        return output  # Keep in fp32
+    
+    # Replace the apply method
+    UnquantizedLinearMethod.apply = our_linear_apply
+    UnquantizedEmbeddingMethod.apply = our_linear_apply
+    RotaryEmbedding.forward_cuda = our_fp32_rope_forward_cuda
+    LlamaAttention.forward = our_llama_attn_forward
+    print("Patched vLLM for Llama: Model loaded in fp32, linear weights stored in bfloat16, all computations in fp32")
