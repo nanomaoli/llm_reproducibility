@@ -3,6 +3,7 @@
 Codebase of [Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning](https://arxiv.org/abs/2506.09501)
 
 ## News
+- [2025.09.25]: 🎉🎉🎉 Our paper has been selected for Oral Presentation for Neurips 2025. See you in SD! 
 - [2025.06.18]: Our paper has been released on [arxiv](https://arxiv.org/abs/2506.09501). Feel free to ⭐UPVOTE in [huggingface](https://huggingface.co/papers/2506.09501)
 
 <br>
