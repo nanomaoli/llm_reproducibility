@@ -1,11 +1,11 @@
-# Challenges and Solutions of LLM Reproducibility
+# ⚙️ Challenges and Solutions of LLM Reproducibility
 
-A toolkit that enables deterministic LLM inference and eliminates the training–inference mismatch in reinforcement learning
+*A toolkit that enables deterministic LLM inference and eliminates the training–inference mismatch in reinforcement learning。*
 
 
-**Deterministic Inference across Tensor Parallel Sizes That Eliminates Training–Inference Mismatch** [[Paper](https://arxiv.org/abs/2506.09501)]
+**Deterministic Inference across Tensor Parallel Sizes That Eliminates Training–Inference Mismatch** [[Paper]()] [[Code]()]
 
-**Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference** (NeurIPS 2025, **Oral**) [[Paper](https://arxiv.org/abs/2506.09501)] [[HF](https://huggingface.co/papers/2506.09501)] [[Code]()]
+**Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference** (NeurIPS 2025, **Oral**) [[Paper](https://arxiv.org/abs/2506.09501)] [[HF](https://huggingface.co/papers/2506.09501)] [[Code](https://github.com/nanomaoli/llm_reproducibility/tree/main/evaluation)]
 
 ## News
 - [2025.11.18]: 🗣️ A new paper has been released on [arxiv](). In this paper, we proposed TBIK(Tree Based Invariant Kernels), which enables deterministic inference across TP sizes and fundamentally resolves the training–inference mismatch problem in reinforcement learning.
@@ -63,7 +63,7 @@ cd ..
 3. Download this repository
 ```bash
 git clone https://github.com/nanomaoli/llm_reproducibility
-cd TBIK
+cd llm_reproducibility
 ```
 
 ## How to try TBIK?
@@ -88,7 +88,7 @@ Following [spirl](https://github.com/bwasti/spirl), we use vLLM for inference an
 ```
 
 ## Evaluation
-To run the evaluation on the full dataset, please refer to [./evaluation]
+To run the evaluation on the full dataset, please refer to [./evaluation](https://github.com/nanomaoli/llm_reproducibility/tree/main/evaluation)
 
 ## Contributing
 The code was currently tested with ✅Qwen3-1.7B, should work with other Qwen3 models with the same architecture.
