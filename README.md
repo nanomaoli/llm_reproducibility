@@ -1,6 +1,6 @@
-# ⚙️ Challenges and Solutions of LLM Reproducibility
+# ⚙️ Monkey Patching Solutions for Deterministic LLM Generation
 
-*A toolkit that enables deterministic LLM inference and eliminates the training–inference mismatch in reinforcement learning.*
+*TL;DR: A toolkit that enables deterministic LLM inference and eliminates the training–inference mismatch in reinforcement learning.*
 
 
 **Deterministic Inference across Tensor Parallel Sizes That Eliminates Training–Inference Mismatch** [[Paper]()] [[Code]()]
@@ -8,25 +8,26 @@
 **Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference** (NeurIPS 2025, **Oral**) [[Paper](https://arxiv.org/abs/2506.09501)] [[HF](https://huggingface.co/papers/2506.09501)] [[Code](https://github.com/nanomaoli/llm_reproducibility/tree/main/evaluation)]
 
 ## News
-- [2025.11.18]: 🗣️ A new paper has been released on [arxiv](). In this paper, we proposed TBIK(Tree Based Invariant Kernels), which enables deterministic inference across TP sizes and fundamentally resolves the training–inference mismatch problem in reinforcement learning.
+- [2025.11.18]: 🗣️ A new paper has been released on [arxiv](). In this paper, we proposed TBIK(Tree Based Invariant Kernels), which enables deterministic inference across TP sizes.
+This kernel also fundamentally solves the training–inference mismatch problem in reinforcement learning when they are using different parallelization stragey.
 - [2025.09.25]: 🎉🎉🎉 Our paper has been selected for Oral Presentation for Neurips 2025. See you in SD! 
 - [2025.06.18]: Our paper has been released on [arxiv](https://arxiv.org/abs/2506.09501). Feel free to ⭐UPVOTE in [huggingface](https://huggingface.co/papers/2506.09501)
 
 ## Overview
 
-The fundamental source of nondeterminism in LLM serving systems is the non-associativity of floating-point arithmetic combined with variations in kernel execution order. Recent work from Thinking Machines Lab introduced batch-invariant operators, which ensure deterministic outputs across different batch sizes. However, tensor parallelism introduces another source of nondeterminism: matrix multiplication often uses a split-K parallel strategy, causing model outputs to vary with different TP sizes.
+In our [LLM evaluation reproducibility report](https://arxiv.org/pdf/2506.09501), we found that chaning Batch size and GPU counts can impact the reasoning trace a lot This is due to the differences in float-point arthmetic order across configurations. Thinking Machines Lab introduced [batch-invariant operators](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/), which ensure deterministic outputs across different batch sizes. However, nondeterminism remains unresolved when changing TP sizes, a common scenario in RL that training and rollout engines employ different parallelization strategy.
 
 <p align="center">
   <img src="figures/kernel.png" width="400"/>
 </p>
 
 <p align="center">
-  <i>Illustration of TP-invariant matrix multiplication under the split-K parallel strategy.</i>
+  <i>Illustration of TP-invariant matrix multiplication.</i>
 </p>
 
 We propose TBIK, a TP-invariant matmul method that achieves determinism by strictly controlling the reduction order in matrix multiplications. By replacing TP-size-sensitive(Row-Split) layers such as o_proj and down_proj with our TP-invariant counterparts, and by employing a tree-structured cross-GPU all-reduce, we achieve fully deterministic LLM inference across different TP sizes.
 
-Furthermore, we align the training engine (TP=1) with the inference engine (TP>1), enabling bitwise-identical true on-policy reinforcement learning.
+Furthermore, we align training engine FSDP (TP=1) with the vLLM rollout engine under tensor parallelism (TP>1), enabling bitwise-identical true on-policy reinforcement learning.
 
 <p align="center">
   <img src="figures/overview.png" width="700"/>
@@ -66,7 +67,7 @@ git clone https://github.com/nanomaoli/llm_reproducibility
 cd llm_reproducibility
 ```
 
-## How to try TBIK?
+## How to use TBIK?
 Unlock deterministic vLLM inference and true policy reinforcement learning with just a single, lightweight `apply_patches()` function! It automatically applies the appropriate patches based on the environment variables.
 
 ### Deterministic Matmul
@@ -87,7 +88,7 @@ Following [spirl](https://github.com/bwasti/spirl), we use vLLM for inference an
 [CUDA_VISIBLE_DEVICES] VLLM_BATCH_INVARIANT=1 VLLM_TP_INVARIANT=1 ALIGN_TRAIN_INFERENCE=1 python simple_rl.py
 ```
 
-## Evaluation
+## Evaluating Reproducibility of Reasoning
 To run the evaluation on the full dataset, please refer to [./evaluation](https://github.com/nanomaoli/llm_reproducibility/tree/main/evaluation)
 
 ## Contributing
