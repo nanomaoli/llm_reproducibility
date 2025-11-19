@@ -11,3 +11,8 @@ vllm_version_test/test*
 acc_folder*/
 scoring*.py
 arxiv_exp/test*
+
+converted/
+models/
+logs/
+outputs/
