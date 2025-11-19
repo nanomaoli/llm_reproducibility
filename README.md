@@ -71,7 +71,7 @@ cd llm_reproducibility
 Unlock deterministic vLLM inference and true policy reinforcement learning with just a single, lightweight `apply_patches()` function! It automatically applies the appropriate patches based on the environment variables.
 
 ### Deterministic Matmul
-The root cause of TP non-invariance in LLM serving systems is that matmul operations using the split-K parallelization strategy introduce nondeterministic reduction orders. With our tree-based matmul, the result of matrix multiplication remains invariant regardless of the number of splits. You can switch between the standard matmul and the tree-based matmul by setting `TP_INVARIANT_MATMUL=0/1`.
+Matmul operations have different reduction order when splitting over different numbers of GPUs. With our tree-based matmul, the result of matrix multiplication remains invariant regardless of the number of splits. You can switch between the standard matmul and the tree-based matmul by setting `TP_INVARIANT_MATMUL=0/1`.
 ```bash
 TP_INVARIANT_MATMUL=1 python simple_matmul.py
 ```
