@@ -77,7 +77,7 @@ TP_INVARIANT_MATMUL=1 python simple_matmul.py
 ```
 
 ### Deterministic LLM inference
-In vLLM’s model implementation, the `o_proj` layer in the attention module and the `down_proj` layer in the FFN use 'row-split' linear layers, whose matrix computations rely on split-K parallelism. By replacing these row-split linear layers with our TP-invariant counterparts and co-designing both the intra-kernel reduction order and the inter-GPU reduction order(and also batch invariant operations), vLLM can achieve deterministic inference across different runtime settings.
+In vLLM’s model implementation, the `o_proj` layer in the attention module and the `down_proj` layer in the FFN use 'row-split' linear layers. By replacing these row-split linear layers with our TP-invariant counterparts and co-designing both the intra-kernel reduction order and the inter-GPU reduction order(and also batch invariant operations), vLLM can achieve deterministic inference across different runtime settings.
 ```bash
 VLLM_BATCH_INVARIANT=1 VLLM_TP_INVARIANT=1 python simple_inference.py
 ```
