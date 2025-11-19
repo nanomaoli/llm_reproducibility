@@ -1,6 +1,6 @@
 # ⚙️ Challenges and Solutions of LLM Reproducibility
 
-*A toolkit that enables deterministic LLM inference and eliminates the training–inference mismatch in reinforcement learning。*
+*A toolkit that enables deterministic LLM inference and eliminates the training–inference mismatch in reinforcement learning.*
 
 
 **Deterministic Inference across Tensor Parallel Sizes That Eliminates Training–Inference Mismatch** [[Paper]()] [[Code]()]
