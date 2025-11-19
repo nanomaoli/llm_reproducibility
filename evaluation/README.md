@@ -1,0 +1,158 @@
+# Challenges and Solutions of LLM Reproducibility
+
+Codebase of [Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning](https://arxiv.org/abs/2506.09501)
+
+## News
+- [2025.09.25]: 🎉🎉🎉 Our paper has been selected for Oral Presentation for Neurips 2025. See you in SD! 
+- [2025.06.18]: Our paper has been released on [arxiv](https://arxiv.org/abs/2506.09501). Feel free to ⭐UPVOTE in [huggingface](https://huggingface.co/papers/2506.09501)
+
+<br>
+
+<p align="center">
+  <img src="../figures/reproduciblellm_fig1.png" width="800"/>
+</p>
+
+<p align="center">
+  <i><b>Figure 1.</b> <b>Left:</b> Under BF16 precision and greedy decoding, the model's output can vary significantly depending on factors such as GPU count, evaluation batch size, and GPU hardware version. <b>Right:</b> For example, changes in evaluation batch size alone can lead to noticeable differences in responses, which is often ignored and not standardized by evaluation benchmarks.</i>
+</p>
+
+## Overview
+This repository contains the official implementation of **"Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning"**. We present the first systematic study on the fragility of LLM reproducibility under different system configurations. Our work identifies reduced numerical precision as a key source of divergence, and introduces LayerCast, a hybrid-precision inference pipeline that balances memory efficiency with numerical stability. 
+
+## Environment Setup
+
+```bash
+conda create -n reproducible_llm python=3.12 -y
+conda activate reproducible_llm
+pip install vllm==0.11.0
+pip install datasets latex2sympy2 word2number immutabledict nltk langdetect
+```
+#### Impact of Serving System Version
+We consistently used vLLM 0.8.2 for our experiments. Please make sure to use the same vLLM version, since different versions of serving frameworks may employ different GPU kernels, which may have varying numerical stability.
+
+
+## Getting Started
+### To download this repository:
+```bash
+git clone https://github.com/nanomaoli/llm_reproducibility.git
+cd llm_reproducibility
+```
+### To reproduce the main experiments:
+Set CUDA_VISIBLE_DEVICES to control the number of GPUs used, and specify a descriptive exp_name to help track different configurations.
+#### Run inference with greedy decoding:
+```python
+[CUDA_VISIBLE_DEVICES] python eval_main.py --model [MODEL] \
+    --task [TASK] \
+    --dtype [dtype] \
+    --seed [RANDOM_SEED] \
+    --batch_size [BS] \
+    --max_tokens [MAX_TOKENS] \
+    --exp_name [NAME_OF_THE_RUN]
+```
+Model responses and logprobs will be saved to `outputs/vllm_main/{exp_name}/{model}`. We save logprobs of the 5 most likely tokens for analysis in our paper.
+Scoring results will appear in `scoring_results/greedy`.
+
+*Example:*
+```python
+CUDA_VISIBLE_DEVICES=0,1 python eval_main.py --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --task math500 \
+    --dtype bfloat16 \
+    --seed 42 \
+    --batch_size 32 \
+    --max_tokens 32768 \
+    --exp_name 2a100_math500_bf16_bs32
+```
+
+#### Run inference with greedy decoding using LayerCast:
+LayerCast uses `float32` for computation, so `--dtype` should be set accordingly.
+```python
+[CUDA_VISIBLE_DEVICES] python eval_layercast.py --model [MODEL] \
+    --task [TASK] \
+    --dtype float32 \
+    --seed [RANDOM_SEED] \
+    --batch_size [BS] \
+    --max_tokens [MAX_TOKENS] \
+    --exp_name [NAME_OF_THE_RUN]
+```
+Model responses and logprobs will be saved to `outputs/vllm_layercast/{exp_name}/{model}`. 
+Scoring results will appear in `scoring_results/greedy_layercast`.
+
+*Example:*
+```python
+CUDA_VISIBLE_DEVICES=0,1 python eval_layercast.py --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --task math500 \
+    --dtype float32 \
+    --seed 42 \
+    --batch_size 32 \
+    --max_tokens 32768 \
+    --exp_name 2a100_math500_layercast_bs32
+```
+
+
+#### Run inference with random sampling (`n` independent samples per problem):
+
+```python
+[CUDA_VISIBLE_DEVICES] python eval_passk.py --model [MODEL] \
+    --task [TASK] \
+    --dtype [dtype] \
+    --seed [RANDOM_SEED] \
+    --batch_size [BS] \
+    --max_tokens [MAX_TOKENS] \
+    --passk [n] \
+    --exp_name [NAME_OF_THE_RUN]
+```
+Model responses will be saved to `outputs/vllm_passk/{exp_name}/{model}`.
+Scoring results will appear in `scoring_results/random_passk`.
+
+*Example:*
+```python
+CUDA_VISIBLE_DEVICES=0,1 python eval_passk.py --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --task math500 \
+    --dtype bfloat16 \
+    --seed 42 \
+    --batch_size 32 \
+    --max_tokens 32768 \
+    --passk 4 \
+    --exp_name 2a100_pass4_math500_bf16_bs32
+```
+
+### To evaluate TBIK
+#### Run inference with radom sampling using TBIK:
+```python
+[CUDA_VISIBLE_DEVICES] VLLM_BATCH_INVARIANT=0/1 VLLM_TP_INVARIANT=0/1 python eval_tbik.py --model [MODEL] \
+    --task [TASK] \
+    --dtype bfloat16 \
+    --seed [RANDOM_SEED] \
+    --batch_size [BS] \
+    --exp_name [NAME_OF_THE_RUN]
+```
+
+
+*Example:*
+```python
+CUDA_VISIBLE_DEVICES=0,1 python eval_layercast.py --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --task aime24 \
+    --dtype bfloat \
+    --seed 42 \
+    --batch_size 8\
+    --exp_name 2l40s_aime24_tbik_bs8
+```
+
+## Citation
+
+If you find our work interesting or helpful, please kindly cite our paper.
+
+```bibtex
+@misc{yuan2025fp32deathchallengessolutions,
+      title={Give Me FP32 or Give Me Death? Challenges and Solutions for Reproducible Reasoning}, 
+      author={Jiayi Yuan and Hao Li and Xinheng Ding and Wenya Xie and Yu-Jhe Li and Wentian Zhao and Kun Wan and Jing Shi and Xia Hu and Zirui Liu},
+      year={2025},
+      eprint={2506.09501},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2506.09501}, 
+}
+```
+
+## References
+Our evaluation implementation is adapted from [SkyThought](https://github.com/NovaSky-AI/SkyThought) repository.

@@ -165,7 +165,7 @@ if __name__ == '__main__':
             # NOTE: _parse_chat_message_content_parts() currently doesn't
             # handle mm_processor_kwargs, since there is no implementation in
             # the chat message parsing for it.
-            conversation, mm_data = parse_chat_messages(
+            conversation, mm_data, _ = parse_chat_messages(
                 msgs,
                 model_config,
                 tokenizer,
