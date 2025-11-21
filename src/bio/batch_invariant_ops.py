@@ -440,28 +440,23 @@ def mean_dim(
 
 
 def mm_batch_invariant(a, b):
-    # print('Mm')
     return matmul_persistent(a, b)
 
 
 def addmm_batch_invariant(bias, a, b):
-    # print('Addmm')
     return matmul_persistent(a, b, bias=bias)
 
 
 def _log_softmax_batch_invariant(input, dim, _half_to_float):
-    # print('Log softmax')
     # assert not _half_to_float, "not implemented"
     return log_softmax(input, dim=dim)
 
 def _softmax_batch_invariant(input, dim, _half_to_float):
-    # print('softmax')
     # assert not _half_to_float, "not implemented"
     return torch.exp(log_softmax(input, dim=dim))
 
 
 def mean_batch_invariant(input, dim, keepdim=False, dtype: torch.dtype | None = None):
-    # print('Mean')
     assert dtype is None or dtype == torch.float32, f"unsupported dtype: {dtype}"
     if len(dim) == 1:
         return mean_dim(input, dim[0], keepdim=keepdim)
@@ -469,10 +464,12 @@ def mean_batch_invariant(input, dim, keepdim=False, dtype: torch.dtype | None = 
         assert input.dtype in {torch.float16, torch.bfloat16, torch.float32}, (
             "only float types supported for now"
         )
+        if len(dim) == 0:
+            dim = list(range(input.ndim))
         n_elems = 1
         for d in dim:
             n_elems *= input.shape[d]
-        return torch.sum(input, dim=dim, keepdim=keepdim, dtype=torch.float32) / n_elems
+        return torch.sum(input, dim=dim, keepdim=keepdim, dtype=torch.float32).to(dtype or input.dtype) / n_elems
 
 
 _batch_invariant_MODE = False
