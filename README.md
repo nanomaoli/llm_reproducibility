@@ -83,7 +83,7 @@ VLLM_BATCH_INVARIANT=1 VLLM_TP_INVARIANT=1 python simple_inference.py
 ```
 
 ### Bitwise consistent on-policy RL
-Following [spirl](https://github.com/bwasti/spirl), we use vLLM for inference and TorchTitan for training in our demo code to make the workflow easier to try for users. In practical RL training pipelines, the training engine typically runs with FSDP (TP = 1), while the inference engine runs with TP > 1. This mismatch in numerical precision across the two engines is the fundamental cause of training instability in RL. By introducing TBIK and aligning the operators used in both the training and inference engines, we address this issue at its root, making true on-policy RL feasible.
+Following [spirl](https://github.com/teja-rao/spirl), we use vLLM for inference and TorchTitan for training in our demo code to make the workflow easier to try for users. In practical RL training pipelines, the training engine typically runs with FSDP (TP = 1), while the inference engine runs with TP > 1. This mismatch in numerical precision across the two engines is the fundamental cause of training instability in RL. By introducing TBIK and aligning the operators used in both the training and inference engines, we address this issue at its root, making true on-policy RL feasible.
 ```bash
 [CUDA_VISIBLE_DEVICES] VLLM_BATCH_INVARIANT=1 VLLM_TP_INVARIANT=1 ALIGN_TRAIN_INFERENCE=1 python simple_rl.py
 ```
@@ -115,4 +115,4 @@ If you find our work helpful, please kindly cite our paper.
 ```
 
 ## Acknowledgment
-Our implementation of `simple_rl.py` and `torchtitan` is adapted from [spirl](https://github.com/bwasti/spirl) repository.
+Our implementation of `simple_rl.py` and `torchtitan` is adapted from [spirl](https://github.com/teja-rao/spirl) repository.
