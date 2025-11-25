@@ -3,12 +3,12 @@
 *TL;DR: A toolkit that enables deterministic LLM inference and eliminates the training–inference mismatch in reinforcement learning.*
 
 
-**Deterministic Inference across Tensor Parallel Sizes That Eliminates Training–Inference Mismatch** [[Paper]()] [[Code]()]
+**Deterministic Inference across Tensor Parallel Sizes That Eliminates Training–Inference Mismatch** [[Paper](https://arxiv.org/abs/2511.17826)] [[Code](https://github.com/nanomaoli/llm_reproducibility/tree/main)]
 
 **Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference** (NeurIPS 2025, **Oral**) [[Paper](https://arxiv.org/abs/2506.09501)] [[HF](https://huggingface.co/papers/2506.09501)] [[Code](https://github.com/nanomaoli/llm_reproducibility/tree/main/evaluation)]
 
 ## News
-- [2025.11.18]: 🗣️ A new paper has been released on [arxiv](). In this paper, we proposed TBIK(Tree Based Invariant Kernels), which enables deterministic inference across TP sizes.
+- [2025.11.18]: 🗣️ A new paper has been released on [arxiv](https://arxiv.org/abs/2511.17826). In this paper, we proposed TBIK(Tree Based Invariant Kernels), which enables deterministic inference across TP sizes.
 This kernel also fundamentally solves the training–inference mismatch problem in reinforcement learning when they are using different parallelization stragey.
 - [2025.09.25]: 🎉🎉🎉 Our paper has been selected for Oral Presentation for Neurips 2025. See you in SD! 
 - [2025.06.18]: Our paper has been released on [arxiv](https://arxiv.org/abs/2506.09501). Feel free to ⭐UPVOTE in [huggingface](https://huggingface.co/papers/2506.09501)
@@ -111,6 +111,16 @@ If you find our work helpful, please kindly cite our paper.
       archivePrefix={arXiv},
       primaryClass={cs.CL},
       url={https://arxiv.org/abs/2506.09501}, 
+}
+
+@misc{zhang2025deterministicinferencetensorparallel,
+      title={Deterministic Inference across Tensor Parallel Sizes That Eliminates Training-Inference Mismatch}, 
+      author={Ziyang Zhang and Xinheng Ding and Jiayi Yuan and Rixin Liu and Huizi Mao and Jiarong Xing and Zirui Liu},
+      year={2025},
+      eprint={2511.17826},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2511.17826}, 
 }
 ```
 
