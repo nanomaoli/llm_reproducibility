@@ -3,7 +3,7 @@
 *TL;DR: A toolkit that enables deterministic LLM inference and eliminates the training–inference mismatch in reinforcement learning.*
 
 
-**Deterministic Inference across Tensor Parallel Sizes That Eliminates Training–Inference Mismatch** [[Paper](https://arxiv.org/abs/2511.17826)] [[Code](https://github.com/nanomaoli/llm_reproducibility/tree/main)]
+**Deterministic Inference across Tensor Parallel Sizes That Eliminates Training–Inference Mismatch** [[Paper](https://arxiv.org/abs/2511.17826)] [[Code](https://github.com/nanomaoli/llm_reproducibility/tree/main)][[Blog](https://festive-clam-15f.notion.site/Enabling-Large-Scale-True-on-Policy-RL-by-Bringing-Tensor-Parallelism-to-Order-2b039f5cabfa807b9770fcbe339f0f9b)]
 
 **Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference** (NeurIPS 2025, **Oral**) [[Paper](https://arxiv.org/abs/2506.09501)] [[HF](https://huggingface.co/papers/2506.09501)] [[Code](https://github.com/nanomaoli/llm_reproducibility/tree/main/evaluation)]
 
