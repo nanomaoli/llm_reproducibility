@@ -36,7 +36,7 @@ def patch_row_linear():
         else:
             output = output_parallel
 
-        if bias_ is not None:
+        if (not self.skip_bias_add) and self.bias is not None:
             output += bias_
 
         output_bias = self.bias if self.skip_bias_add else None
