@@ -31,9 +31,9 @@ def _can_p2p(rank: int, world_size: int) -> bool:
 
 
 def in_the_same_node_as(pg: ProcessGroup, source_rank: int = 0) -> List[bool]:
-    assert (
-        dist.get_backend(pg) != dist.Backend.NCCL
-    ), "Use a non-NCCL group for in_the_same_node_as."
+    # assert (
+    #     dist.get_backend(pg) != dist.Backend.NCCL
+    # ), "Use a non-NCCL group for in_the_same_node_as."
     rank = dist.get_rank(group=pg)
     world_size = dist.get_world_size(group=pg)
     hostname = socket.gethostname()
@@ -59,9 +59,9 @@ class CustomAllreduce:
             return
 
         self.group = group
-        assert (
-            dist.get_backend(group) != dist.Backend.NCCL
-        ), "CustomAllreduce requires a non-NCCL process group."
+        # assert (
+        #     dist.get_backend(group) != dist.Backend.NCCL
+        # ), "CustomAllreduce requires a non-NCCL process group."
 
         if not all(in_the_same_node_as(group, source_rank=0)):
             logger.warning("Custom all-reduce disabled: multi-node group detected.")
@@ -92,9 +92,9 @@ class CustomAllreduce:
             device_ids = list(range(torch.cuda.device_count()))
 
         physical_device_id = device_ids[device.index]
-        tensor = torch.tensor([physical_device_id], dtype=torch.int, device="cpu")
+        tensor = torch.tensor([physical_device_id], dtype=torch.int, device="cuda")
         gather_list = [
-            torch.tensor([0], dtype=torch.int, device="cpu") for _ in range(world_size)
+            torch.tensor([0], dtype=torch.int, device="cuda") for _ in range(world_size)
         ]
         dist.all_gather(gather_list, tensor, group=self.group)
         physical_device_ids = [t.item() for t in gather_list]

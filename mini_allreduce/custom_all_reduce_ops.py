@@ -35,10 +35,10 @@ def _preload_libcuda() -> None:
 
 try:
     _preload_libcuda()
-    import sgl_kernel.allreduce as _custom_ar
+    import tbik_kernel.allreduce as _custom_ar
 except ImportError as exc:
     if IS_CUSTOM_AR_AVAILABLE:
-        logger.warning("Failed to import sgl_kernel.allreduce: %r", exc)
+        logger.warning("Failed to import tbik_kernel.allreduce: %r", exc)
     IS_CUSTOM_AR_AVAILABLE = False
 
 if IS_CUSTOM_AR_AVAILABLE:

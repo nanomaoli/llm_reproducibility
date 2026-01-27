@@ -9,15 +9,12 @@ kernel and compare against `torch.distributed.all_reduce` (NCCL).
 - PyTorch with CUDA
 - Build toolchain for CUDA extensions (nvcc, a C++17 compiler)
 
-This mini build compiles a minimal `sgl_kernel.common_ops` extension locally
-and exposes the `sgl_kernel.allreduce` wrapper for the benchmark.
-
 ## Install
 
 From the repo root:
 
 ```
-uv pip install -v ./mini_allreduce
+uv pip install --no-build-isolation -v ./mini_allreduce
 ```
 
 

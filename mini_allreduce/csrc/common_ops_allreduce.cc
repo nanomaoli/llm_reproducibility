@@ -34,7 +34,7 @@ void register_graph_buffers(
     const std::vector<std::vector<int64_t>>& handles,
     const std::vector<std::vector<int64_t>>& offsets);
 
-TORCH_LIBRARY_FRAGMENT(sgl_kernel, m) {
+TORCH_LIBRARY_FRAGMENT(tbik_kernel, m) {
   m.def("get_graph_buffer_ipc_meta", &get_graph_buffer_ipc_meta);
   m.def("register_graph_buffers", &register_graph_buffers);
   m.def("dispose", &dispose);
