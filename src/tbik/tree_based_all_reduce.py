@@ -1,18 +1,25 @@
 import torch
 import torch.distributed as dist
 
+custom_ar = None
 
-def tree_all_reduce_sum(x: torch.Tensor, device_group=None) -> torch.Tensor:
-    """
-    使用树状归约和广播实现 all_reduce_sum。
+def tree_all_reduce_sum(x:torch.Tensor, device_group=None) -> torch.Tensor:
+    global custom_ar
 
-    Args:
-        x (torch.Tensor): 本地数据张量。
-        device_group: 可选的分布式组。
+    if x.numel() > 2**16:
+        return tree_all_reduce_sum_native(x, device_group)
+    try:
+        if custom_ar is None:
+            from mini_allreduce import CustomTreeAllreduce
+            custom_ar = CustomTreeAllreduce(group=device_group, device=x.device)
+        if custom_ar.disabled:
+            raise 'CustomTreeAllreduce is disabled.'
+        y = custom_ar.custom_tree_all_reduce(x)
+        return y
+    except:
+        return tree_all_reduce_sum_native(x, device_group)
 
-    Returns:
-        torch.Tensor: 归约并广播到所有进程后的张量。
-    """
+def tree_all_reduce_sum_native(x: torch.Tensor, device_group=None) -> torch.Tensor:
     rank = dist.get_rank(device_group)
     world_size = dist.get_world_size(device_group)
 

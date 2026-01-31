@@ -40,7 +40,7 @@ def _worker(
     tbik_dir = repo_root / "src" / "tbik"
     sys.path.insert(0, str(repo_root))
     sys.path.insert(0, str(tbik_dir))
-    from tree_based_all_reduce import tree_all_reduce_sum
+    from tree_based_all_reduce import tree_all_reduce_sum_native
 
     from mini_allreduce import CustomTreeAllreduce
 
@@ -57,7 +57,7 @@ def _worker(
         dist.destroy_process_group()
         return
 
-    ref = tree_all_reduce_sum(inp, device_group=dist.group.WORLD)
+    ref = tree_all_reduce_sum_native(inp, device_group=dist.group.WORLD)
     eps = torch.finfo(ref.dtype).eps
     rel_diff = (ref - out).abs() / ref.abs().clamp_min(eps)
     rel_diff_f = rel_diff.float()
