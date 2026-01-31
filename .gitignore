@@ -16,3 +16,6 @@ converted/
 models/
 logs/
 outputs/
+
+**/build/
+*.so
