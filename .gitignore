@@ -19,3 +19,12 @@ outputs/
 
 **/build/
 *.so
+
+# UV virtual environments and cache
+.venv/
+venv/
+.uv/
+.cache/uv/
+
+*.md
+!README.md
