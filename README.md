@@ -8,6 +8,7 @@
 **Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference** (NeurIPS 2025, **Oral**) [[Paper](https://arxiv.org/abs/2506.09501)] [[HF](https://huggingface.co/papers/2506.09501)] [[Code](https://github.com/nanomaoli/llm_reproducibility/tree/main/evaluation)]
 
 ## News
+- [2026.2.9] 🚧 We add the custom tree all-reduce kernel to minimize the all-reduce latency (It requires NVLink).
 - [2025.11.18]: 🗣️ A new paper has been released on [arxiv](https://arxiv.org/abs/2511.17826). In this paper, we proposed TBIK(Tree Based Invariant Kernels), which enables deterministic inference across TP sizes.
 This kernel also fundamentally solves the training–inference mismatch problem in reinforcement learning when they are using different parallelization stragey.
 - [2025.09.25]: 🎉🎉🎉 Our paper has been selected for Oral Presentation for Neurips 2025. See you in SD! 
