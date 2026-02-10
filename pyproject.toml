@@ -1,0 +1,59 @@
+[project]
+name = "tbik"
+version = "0.1.0"
+description = "Tree-Based Invariant Kernels (TBIK) for deterministic LLM inference across tensor parallel sizes"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "torch>=2.4.0",
+    "vllm==0.11.0",
+    "transformers==4.57",
+    "huggingface-hub>=0.20.0",
+    "safetensors>=0.4.0",
+    "triton>=3.0.0",
+]
+
+[project.optional-dependencies]
+# For reinforcement learning experiments (simple_rl.py)
+rl = [
+    "flash-attn>=2.5.0",
+    "tensorboard>=2.15.0",
+]
+
+# For evaluation tasks
+eval = [
+    "datasets>=2.14.0",
+    "latex2sympy2>=1.9.0",
+    "word2number>=1.1",
+    "immutabledict>=3.0.0",
+    "nltk>=3.8.0",
+    "langdetect>=1.0.9",
+    "tqdm>=4.65.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+]
+
+# All optional dependencies
+all = [
+    "flash-attn>=2.5.0",
+    "tensorboard>=2.15.0",
+    "datasets>=2.14.0",
+    "latex2sympy2>=1.9.0",
+    "word2number>=1.1",
+    "immutabledict>=3.0.0",
+    "nltk>=3.8.0",
+    "langdetect>=1.0.9",
+    "tqdm>=4.65.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.setuptools.package-data]
+src = ["**/*.py"]

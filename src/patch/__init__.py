@@ -5,7 +5,7 @@ from .patch_training_inference_align import patch_training_inference_align
 __all__ = ["apply_patches"]
 
 def apply_patches():
-    from utils import batch_invariant_is_enabled, tp_invariant_is_enabled, compatible_mode_is_enabled
+    from src.utils import batch_invariant_is_enabled, tp_invariant_is_enabled, compatible_mode_is_enabled
     if not batch_invariant_is_enabled() and not tp_invariant_is_enabled() and not compatible_mode_is_enabled():
         print("No patches applied to vLLM\n")
         return

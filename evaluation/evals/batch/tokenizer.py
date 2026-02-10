@@ -44,7 +44,10 @@ def get_cached_tokenizer(tokenizer: AnyTokenizer) -> AnyTokenizer:
             chat_template = getattr(tokenizer, "chat_template", None)
 
     tokenizer_all_special_ids = set(tokenizer.all_special_ids)
-    tokenizer_all_special_tokens_extended = tokenizer.all_special_tokens_extended
+    # all_special_tokens_extended may not exist in newer transformers versions
+    tokenizer_all_special_tokens_extended = getattr(
+        tokenizer, "all_special_tokens_extended", tokenizer.all_special_tokens
+    )
     tokenizer_all_special_tokens = set(tokenizer.all_special_tokens)
     tokenizer_len = len(tokenizer)
 

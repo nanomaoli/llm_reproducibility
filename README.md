@@ -39,32 +39,44 @@ Furthermore, we align training engine FSDP (TP=1) with the vLLM rollout engine u
 
 
 ## Setup
-1. Install vllm
-```bash
-conda create -n tbik python=3.12 -y
-conda activate tbik
-pip install vllm==0.11.0
-```
-<!-- 2. Install dependencies
-```bash
-pip install datasets latex2sympy2 word2number immutabledict nltk langdetect
-``` -->
 
-2. Install Torchtitan and Flash Attention(This is optional unless you want to try `simple_rl.py`)
+### 1. Install uv
 ```bash
-# Flash Attention
-pip install flash-attn --no-build-isolation
-# Torchtitan
-git clone https://github.com/xh-ding/torchtitan.git
-cd torchtitan
-pip install -e .
-cd ..
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-3. Download this repository
+### 2. Clone and setup
 ```bash
 git clone https://github.com/nanomaoli/llm_reproducibility
 cd llm_reproducibility
+uv venv --python 3.12
+source .venv/bin/activate
+```
+
+### 3. Install core dependencies
+```bash
+uv pip install -e .
+```
+
+### 4. Install mini_allreduce (custom all-reduce kernels)
+```bash
+uv pip install --no-build-isolation -v ./mini_allreduce
+```
+
+### 5. (Optional) Install Flash Attention and TorchTitan for RL experiments
+```bash
+uv pip install flash-attn --no-build-isolation
+git clone https://github.com/xh-ding/torchtitan.git
+cd torchtitan
+uv pip install -e .
+cd ..
+uv pip install -e ".[rl]"
+```
+
+### 6. Verify installation
+```bash
+python verify_installation.py
+python simple_matmul.py
 ```
 
 ## How to use TBIK?
