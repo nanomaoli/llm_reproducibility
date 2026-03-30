@@ -244,7 +244,11 @@ def extract_numeric_answer(text: str) -> str | None:
     return None
 
 
-def load_gsm8k_dataset(split: str = "train", num_samples: int = 100) -> tuple[list[str] | None, list[str] | None]:
+def load_gsm8k_dataset(
+    split: str = "train",
+    num_samples: int = 100,
+    offset: int = 0,
+) -> tuple[list[str] | None, list[str] | None]:
     try:
         from datasets import load_dataset
 
@@ -252,7 +256,11 @@ def load_gsm8k_dataset(split: str = "train", num_samples: int = 100) -> tuple[li
         prompts: list[str] = []
         answers: list[str] = []
 
+        skipped = 0
         for item in dataset:
+            if skipped < offset:
+                skipped += 1
+                continue
             if len(prompts) >= num_samples:
                 break
 
@@ -334,6 +342,37 @@ def normalize_rewards(rewards: torch.Tensor) -> tuple[torch.Tensor, float, float
     else:
         normalized = rewards - reward_mean
     return normalized, reward_mean.item(), reward_std.item()
+
+
+def compute_mc_pass_at_1(
+    completions: list[str],
+    expected_answers: list[str],
+    num_eval_per_sample: int,
+) -> dict[str, Any]:
+    rewards = math_reward_function(
+        completions,
+        expected_answers,
+        group_size=num_eval_per_sample,
+    )
+    grouped = rewards.view(len(expected_answers), num_eval_per_sample)
+    per_prompt_pass_at_1 = grouped.mean(dim=1)
+    any_correct_rate = (grouped.max(dim=1).values > 0).float().mean().item()
+    pass_at_1 = per_prompt_pass_at_1.mean().item()
+    if len(expected_answers) > 1:
+        stderr = (
+            per_prompt_pass_at_1.std(unbiased=True).item()
+            / math.sqrt(len(expected_answers))
+        )
+    else:
+        stderr = 0.0
+
+    return {
+        "pass_at_1": pass_at_1,
+        "pass_at_1_stderr": stderr,
+        "any_correct_rate": any_correct_rate,
+        "per_prompt_pass_at_1": [float(value) for value in per_prompt_pass_at_1.tolist()],
+        "rewards": [float(value) for value in rewards.tolist()],
+    }
 
 
 def compute_grpo_advantages(

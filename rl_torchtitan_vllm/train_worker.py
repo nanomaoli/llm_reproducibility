@@ -171,8 +171,11 @@ def main() -> None:
     reward_fn_name = rollout_bundle["reward_fn"]
     expected_answers = rollout_bundle["expected_answers"]
     group_size = int(rollout_bundle["group_size"])
-    num_rollout_batches = len(rollout_bundle["batches"])
-    sample_completion = rollout_bundle["batches"][0]["completions"][0]
+    rollout_batch_size = int(
+        rollout_bundle.get("rollout_batch_size", len(rollout_bundle["prompt_texts"]))
+    )
+    rollout = rollout_bundle["rollout"]
+    sample_completion = rollout["completions"][0]
 
     optimizer.zero_grad(set_to_none=True)
     total_loss = torch.zeros((), dtype=torch.float32, device=device)
@@ -185,104 +188,97 @@ def main() -> None:
     entropies: list[float] = []
     ratios: list[float] = []
     clipped_fracs: list[float] = []
-    batch_reports: list[dict[str, Any]] = []
+    if reward_fn_name == "math_reward_function":
+        rewards = math_reward_function(rollout["completions"], expected_answers, group_size)
+    else:
+        rewards = trivial_reward_function(rollout["completions"], expected_answers, group_size)
 
-    for batch_idx, batch in enumerate(rollout_bundle["batches"]):
-        if reward_fn_name == "math_reward_function":
-            rewards = math_reward_function(batch["completions"], expected_answers, group_size)
-        else:
-            rewards = trivial_reward_function(batch["completions"], expected_answers, group_size)
+    rewards_normalized, reward_mean, reward_std = normalize_rewards(rewards)
+    if args.use_stable_grpo:
+        advantages = compute_grpo_advantages_stable(rewards_normalized, group_size)
+    else:
+        advantages = compute_grpo_advantages(rewards_normalized, group_size, beta=args.grpo_beta)
 
-        rewards_normalized, reward_mean, reward_std = normalize_rewards(rewards)
-        if args.use_stable_grpo:
-            advantages = compute_grpo_advantages_stable(rewards_normalized, group_size)
-        else:
-            advantages = compute_grpo_advantages(rewards_normalized, group_size, beta=args.grpo_beta)
+    rollout["rewards"] = rewards
+    rollout["advantages"] = advantages
+    local_indices = shard_indices(len(rollout["completions"]), rank, world_size)
+    local_batch = select_batch_items(rollout, local_indices)
+    local_item_count = len(local_batch["completions"])
 
-        batch["rewards"] = rewards
-        batch["advantages"] = advantages
-        local_indices = shard_indices(len(batch["completions"]), rank, world_size)
-        local_batch = select_batch_items(batch, local_indices)
-        local_item_count = len(local_batch["completions"])
+    rollout_pg_loss = 0.0
+    rollout_kl_div = 0.0
+    rollout_entropy = 0.0
+    rollout_ratio_mean = 0.0
+    rollout_ratio_clipped_frac = 0.0
 
-        batch_pg_loss = 0.0
-        batch_kl_div = 0.0
-        batch_entropy = 0.0
-        batch_ratio_mean = 0.0
-        batch_ratio_clipped_frac = 0.0
-
-        if local_item_count > 0:
-            for micro_batch in iter_micro_batches(local_batch, args.train_micro_batch_size):
-                micro_batch_count = len(micro_batch["completions"])
-                loss, loss_metrics = compute_policy_gradient_loss_vllm(
-                    fsdp_model,
-                    micro_batch["token_ids"],
-                    micro_batch["token_log_probs"],
-                    micro_batch["prompt_token_ids"],
-                    micro_batch["advantages"],
-                    kl_coef=args.kl_coef,
-                )
-
-                micro_weight = micro_batch_count / local_item_count
-                scaled_loss = loss * micro_weight / num_rollout_batches
-                scaled_loss.backward()
-                total_loss += scaled_loss.detach()
-
-                batch_pg_loss += loss_metrics["pg_loss"] * micro_weight
-                batch_kl_div += loss_metrics["kl_div"] * micro_weight
-                batch_entropy += loss_metrics["entropy"] * micro_weight
-                batch_ratio_mean += loss_metrics["ratio_mean"] * micro_weight
-                batch_ratio_clipped_frac += loss_metrics["ratio_clipped_frac"] * micro_weight
-
-        global_batch_reward_mean = average_tensor(reward_mean, device)
-        global_batch_reward_std = average_tensor(reward_std, device)
-        global_batch_advantage_mean = average_tensor(float(advantages.mean().item()), device)
-        global_batch_advantage_std = average_tensor(float(advantages.std().item()), device)
-        global_batch_pg_loss = weighted_average(batch_pg_loss, local_item_count, device)
-        global_batch_kl_div = weighted_average(batch_kl_div, local_item_count, device)
-        global_batch_entropy = weighted_average(batch_entropy, local_item_count, device)
-        global_batch_ratio_mean = weighted_average(batch_ratio_mean, local_item_count, device)
-        global_batch_ratio_clipped_frac = weighted_average(
-            batch_ratio_clipped_frac,
-            local_item_count,
-            device,
-        )
-
-        reward_means.append(global_batch_reward_mean)
-        reward_stds.append(global_batch_reward_std)
-        advantage_means.append(global_batch_advantage_mean)
-        advantage_stds.append(global_batch_advantage_std)
-        pg_losses.append(global_batch_pg_loss)
-        kl_divs.append(global_batch_kl_div)
-        entropies.append(global_batch_entropy)
-        ratios.append(global_batch_ratio_mean)
-        clipped_fracs.append(global_batch_ratio_clipped_frac)
-
-        if rank == 0:
-            batch_reports.append(
-                {
-                    "batch_idx": batch_idx,
-                    "reward_mean": global_batch_reward_mean,
-                    "reward_std": global_batch_reward_std,
-                    "advantage_mean": global_batch_advantage_mean,
-                    "advantage_std": global_batch_advantage_std,
-                    "training_rollout_kl_div": global_batch_kl_div,
-                    "pg_loss": global_batch_pg_loss,
-                    "entropy": global_batch_entropy,
-                    "ratio_mean": global_batch_ratio_mean,
-                    "ratio_clipped_frac": global_batch_ratio_clipped_frac,
-                    "sample_completion": batch["completions"][0] if batch["completions"] else "",
-                    "rollout": {
-                        "completions": batch["completions"],
-                        "log_probs": batch.get("log_probs", []),
-                        "token_ids": batch["token_ids"],
-                        "token_log_probs": batch["token_log_probs"],
-                        "prompt_token_ids": batch["prompt_token_ids"],
-                    },
-                    "rewards": [float(value) for value in rewards.tolist()],
-                    "advantages": [float(value) for value in advantages.tolist()],
-                }
+    if local_item_count > 0:
+        for micro_batch in iter_micro_batches(local_batch, args.train_micro_batch_size):
+            micro_batch_count = len(micro_batch["completions"])
+            loss, loss_metrics = compute_policy_gradient_loss_vllm(
+                fsdp_model,
+                micro_batch["token_ids"],
+                micro_batch["token_log_probs"],
+                micro_batch["prompt_token_ids"],
+                micro_batch["advantages"],
+                kl_coef=args.kl_coef,
             )
+
+            micro_weight = micro_batch_count / local_item_count
+            scaled_loss = loss * micro_weight
+            scaled_loss.backward()
+            total_loss += scaled_loss.detach()
+
+            rollout_pg_loss += loss_metrics["pg_loss"] * micro_weight
+            rollout_kl_div += loss_metrics["kl_div"] * micro_weight
+            rollout_entropy += loss_metrics["entropy"] * micro_weight
+            rollout_ratio_mean += loss_metrics["ratio_mean"] * micro_weight
+            rollout_ratio_clipped_frac += loss_metrics["ratio_clipped_frac"] * micro_weight
+
+    global_reward_mean = average_tensor(reward_mean, device)
+    global_reward_std = average_tensor(reward_std, device)
+    global_advantage_mean = average_tensor(float(advantages.mean().item()), device)
+    global_advantage_std = average_tensor(float(advantages.std().item()), device)
+    global_pg_loss = weighted_average(rollout_pg_loss, local_item_count, device)
+    global_kl_div = weighted_average(rollout_kl_div, local_item_count, device)
+    global_entropy = weighted_average(rollout_entropy, local_item_count, device)
+    global_ratio_mean = weighted_average(rollout_ratio_mean, local_item_count, device)
+    global_ratio_clipped_frac = weighted_average(
+        rollout_ratio_clipped_frac,
+        local_item_count,
+        device,
+    )
+
+    reward_means.append(global_reward_mean)
+    reward_stds.append(global_reward_std)
+    advantage_means.append(global_advantage_mean)
+    advantage_stds.append(global_advantage_std)
+    pg_losses.append(global_pg_loss)
+    kl_divs.append(global_kl_div)
+    entropies.append(global_entropy)
+    ratios.append(global_ratio_mean)
+    clipped_fracs.append(global_ratio_clipped_frac)
+
+    rollout_report = None
+    if rank == 0:
+        rollout_report = {
+            "reward_mean": global_reward_mean,
+            "reward_std": global_reward_std,
+            "advantage_mean": global_advantage_mean,
+            "advantage_std": global_advantage_std,
+            "training_rollout_kl_div": global_kl_div,
+            "pg_loss": global_pg_loss,
+            "entropy": global_entropy,
+            "ratio_mean": global_ratio_mean,
+            "ratio_clipped_frac": global_ratio_clipped_frac,
+            "sample_completion": rollout["completions"][0] if rollout["completions"] else "",
+            "completions": rollout["completions"],
+            "log_probs": rollout.get("log_probs", []),
+            "token_ids": rollout["token_ids"],
+            "token_log_probs": rollout["token_log_probs"],
+            "prompt_token_ids": rollout["prompt_token_ids"],
+            "rewards": [float(value) for value in rewards.tolist()],
+            "advantages": [float(value) for value in advantages.tolist()],
+        }
 
     if hasattr(fsdp_model, "clip_grad_norm_"):
         fsdp_model.clip_grad_norm_(1.0)
@@ -313,14 +309,14 @@ def main() -> None:
         "ratio_mean": average_tensor(safe_mean(ratios), device),
         "ratio_clipped_frac": average_tensor(safe_mean(clipped_fracs), device),
         "sample_completion": sample_completion,
-        "total_samples": len(rollout_bundle["prompt_texts"]) * group_size * num_rollout_batches,
+        "total_samples": len(rollout_bundle["prompt_texts"]) * group_size,
         "train_micro_batch_size": args.train_micro_batch_size,
         "reward_fn": reward_fn_name,
         "prompt_texts": rollout_bundle["prompt_texts"],
         "expected_answers": expected_answers,
         "group_size": group_size,
-        "num_rollout_batches": num_rollout_batches,
-        "batches": batch_reports if rank == 0 else [],
+        "rollout_batch_size": rollout_batch_size,
+        "rollout": rollout_report if rank == 0 else None,
     }
 
     if rank == 0:

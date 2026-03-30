@@ -8,10 +8,15 @@ import sys
 import time
 import tempfile
 import json
+import math
+import shutil
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from tqdm import tqdm
+
+from torch.utils.tensorboard import SummaryWriter
 
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -19,6 +24,7 @@ if __package__ in {None, ""}:
 from rl_torchtitan_vllm.common import (
     atomic_write_json,
     build_default_prompts,
+    compute_mc_pass_at_1,
     collect_patch_env,
     detect_vllm_compat_mode,
     download_and_convert_model,
@@ -39,14 +45,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-dir", default="./outputs/rl_fsdp_vllm")
     parser.add_argument("--num-steps", type=int, default=100)
     parser.add_argument("--group-size", type=int, default=8)
-    parser.add_argument("--num-rollout-batches", type=int, default=2)
+    parser.add_argument("--rollout-batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=1e-5)
     parser.add_argument("--train-micro-batch-size", type=int, default=0)
     parser.add_argument("--grpo-beta", type=float, default=0.1)
     parser.add_argument("--use-stable-grpo", action="store_true")
     parser.add_argument("--use-real-dataset", action="store_true")
     parser.add_argument("--use-vllm-compat", action="store_true")
-    parser.add_argument("--num-dataset-samples", type=int, default=16)
+    parser.add_argument("--num-train-samples", type=int, default=16)
+    parser.add_argument("--num-test-samples", type=int, default=16)
+    parser.add_argument("--eval-every-n-steps", type=int, default=0)
+    parser.add_argument("--num-eval-per-sample", type=int, default=16)
     parser.add_argument("--max-new-tokens", type=int, default=1024)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--rollout-gpus", default="0,1,2,3")
@@ -80,19 +89,6 @@ def request_json(method: str, url: str, payload: dict[str, Any] | None = None, t
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {exc.code} for {url}: {error_body}") from exc
-
-
-def wait_for_server(base_url: str, timeout_s: float = 180.0) -> None:
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        try:
-            payload = request_json("GET", f"{base_url}/health", timeout=5.0)
-            if payload.get("ok"):
-                return
-        except Exception:
-            pass
-        time.sleep(1.0)
-    raise TimeoutError(f"Timed out waiting for rollout server at {base_url}")
 
 
 def wait_for_server_process(
@@ -169,6 +165,7 @@ def start_rollout_server(
         stdout=log_handle,
         stderr=subprocess.STDOUT,
     )
+    log_handle.close()
     return process, log_path
 
 
@@ -184,6 +181,43 @@ def stop_rollout_server(base_url: str, process: subprocess.Popen[bytes]) -> None
         process.wait(timeout=30)
 
 
+def select_prompt_batch(
+    prompts: list[str],
+    answers: list[str],
+    start_idx: int,
+    batch_size: int,
+) -> tuple[list[str], list[str], int]:
+    if not prompts:
+        return [], [], start_idx
+
+    batch_size = max(1, min(batch_size, len(prompts)))
+    indices = [(start_idx + offset) % len(prompts) for offset in range(batch_size)]
+    next_idx = (start_idx + batch_size) % len(prompts)
+    return [prompts[idx] for idx in indices], [answers[idx] for idx in indices], next_idx
+
+
+def build_prompt_groups(
+    prompts: list[str],
+    expected_answers: list[str],
+    completions: list[str],
+    rewards: list[float],
+    group_size: int,
+) -> list[dict[str, Any]]:
+    groups = []
+    for prompt_idx, (prompt, answer) in enumerate(zip(prompts, expected_answers)):
+        start = prompt_idx * group_size
+        end = start + group_size
+        groups.append(
+            {
+                "prompt": prompt,
+                "expected_answer": answer,
+                "completions": completions[start:end],
+                "rewards": rewards[start:end],
+            }
+        )
+    return groups
+
+
 def run_rollout_phase(
     base_url: str,
     checkpoint_path: str,
@@ -195,20 +229,16 @@ def run_rollout_phase(
     rollout_path: str,
 ) -> None:
     request_json("POST", f"{base_url}/prepare", {"checkpoint_path": checkpoint_path})
-
-    batches: list[dict[str, Any]] = []
-    for _ in range(args.num_rollout_batches):
-        response = request_json(
-            "POST",
-            f"{base_url}/generate",
-            {
-                "prompt_texts": prompt_texts,
-                "max_new_tokens": args.max_new_tokens,
-                "temperature": args.temperature,
-                "n_samples_per_prompt": args.group_size,
-            },
-        )
-        batches.append(response["result"])
+    response = request_json(
+        "POST",
+        f"{base_url}/generate",
+        {
+            "prompt_texts": prompt_texts,
+            "max_new_tokens": args.max_new_tokens,
+            "temperature": args.temperature,
+            "n_samples_per_prompt": args.group_size,
+        },
+    )
 
     request_json("POST", f"{base_url}/unload", {})
     atomic_write_json(
@@ -219,9 +249,61 @@ def run_rollout_phase(
             "expected_answers": expected_answers,
             "reward_fn": reward_fn_name,
             "group_size": args.group_size,
-            "batches": batches,
+            "rollout_batch_size": len(prompt_texts),
+            "rollout": response["result"],
         },
     )
+
+
+def run_eval_phase(
+    base_url: str,
+    checkpoint_path: str,
+    prompt_texts: list[str],
+    expected_answers: list[str],
+    args: argparse.Namespace,
+    eval_path: str,
+    step: int,
+) -> dict[str, Any]:
+    request_json("POST", f"{base_url}/prepare", {"checkpoint_path": checkpoint_path})
+    response = request_json(
+        "POST",
+        f"{base_url}/generate",
+        {
+            "prompt_texts": prompt_texts,
+            "max_new_tokens": args.max_new_tokens,
+            "temperature": args.temperature,
+            "n_samples_per_prompt": args.num_eval_per_sample,
+        },
+        timeout=1800.0,
+    )
+    request_json("POST", f"{base_url}/unload", {})
+
+    result = response["result"]
+    eval_metrics = compute_mc_pass_at_1(
+        completions=result["completions"],
+        expected_answers=expected_answers,
+        num_eval_per_sample=args.num_eval_per_sample,
+    )
+    prompt_groups = build_prompt_groups(
+        prompts=prompt_texts,
+        expected_answers=expected_answers,
+        completions=result["completions"],
+        rewards=eval_metrics["rewards"],
+        group_size=args.num_eval_per_sample,
+    )
+    report = {
+        "step": step,
+        "num_test_samples": len(prompt_texts),
+        "num_eval_per_sample": args.num_eval_per_sample,
+        "pass_at_1": eval_metrics["pass_at_1"],
+        "pass_at_1_stderr": eval_metrics["pass_at_1_stderr"],
+        "any_correct_rate": eval_metrics["any_correct_rate"],
+        "per_prompt_pass_at_1": eval_metrics["per_prompt_pass_at_1"],
+        "prompt_groups": prompt_groups,
+        "rollout": result,
+    }
+    atomic_write_json(eval_path, report)
+    return report
 
 
 def run_train_phase(
@@ -283,6 +365,8 @@ def main() -> None:
     ensure_dir(args.run_dir)
     ensure_dir(args.logdir)
 
+    writer = SummaryWriter(args.logdir)
+
     if args.model_path and args.checkpoint_path:
         model_path = args.model_path
         current_checkpoint = args.checkpoint_path
@@ -294,35 +378,62 @@ def main() -> None:
         )
 
     if args.use_real_dataset:
-        prompt_texts, expected_answers = load_gsm8k_dataset(
+        train_prompt_texts, train_expected_answers = load_gsm8k_dataset(
             split="train",
-            num_samples=args.num_dataset_samples,
+            num_samples=args.num_train_samples,
+        )
+        test_prompt_texts, test_expected_answers = load_gsm8k_dataset(
+            split="test",
+            num_samples=args.num_test_samples,
         )
     else:
-        prompt_texts, expected_answers = None, None
+        train_prompt_texts, train_expected_answers = None, None
+        test_prompt_texts, test_expected_answers = None, None
 
-    if not prompt_texts or not expected_answers:
-        prompt_texts, expected_answers = build_default_prompts()
+    if not train_prompt_texts or not train_expected_answers:
+        fallback_prompts, fallback_answers = build_default_prompts()
+        train_size = min(args.num_train_samples, len(fallback_prompts))
+        test_size = min(args.num_test_samples, max(1, len(fallback_prompts) - train_size))
+        train_prompt_texts = fallback_prompts[:train_size]
+        train_expected_answers = fallback_answers[:train_size]
+        test_prompt_texts = fallback_prompts[-test_size:]
+        test_expected_answers = fallback_answers[-test_size:]
         reward_fn_name = "trivial_reward_function"
         args.max_new_tokens = min(args.max_new_tokens, 20)
     else:
         reward_fn_name = "math_reward_function"
+        if not test_prompt_texts or not test_expected_answers:
+            test_prompt_texts = train_prompt_texts[: min(args.num_test_samples, len(train_prompt_texts))]
+            test_expected_answers = train_expected_answers[: len(test_prompt_texts)]
 
     port = args.vllm_port or find_free_port()
     base_url = f"http://127.0.0.1:{port}"
     print(f"Using rollout server at {base_url}")
-    print(f"Loaded {len(prompt_texts)} prompts with reward function {reward_fn_name}")
+    print(
+        f"Loaded {len(train_prompt_texts)} train prompts and "
+        f"{len(test_prompt_texts)} test prompts with reward function {reward_fn_name}"
+    )
     print(f"Patch env: {format_patch_env(os.environ)}")
+    rollout_batch_size = max(1, min(args.rollout_batch_size, len(train_prompt_texts)))
+    rollout_cursor = 0
+    current_policy_checkpoint = os.path.join(args.run_dir, "current_policy.safetensors")
 
-    for step in range(args.num_steps):
+    for step in tqdm(list(range(args.num_steps))):
         print(f"\n=== Step {step + 1}/{args.num_steps} ===")
         rollout_dir = ensure_dir(Path(args.run_dir) / "rollouts")
         checkpoint_dir = ensure_dir(Path(args.run_dir) / "checkpoints")
         metrics_dir = ensure_dir(Path(args.run_dir) / "metrics")
+        eval_dir = ensure_dir(Path(args.run_dir) / "evals")
 
         rollout_path = os.path.join(rollout_dir, f"step_{step:04d}.json")
-        next_checkpoint = os.path.join(checkpoint_dir, f"policy_step_{step + 1:04d}.safetensors")
         metrics_path = os.path.join(metrics_dir, f"step_{step:04d}.json")
+        eval_path = os.path.join(eval_dir, f"step_{step:04d}.json")
+        rollout_prompts, rollout_answers, rollout_cursor = select_prompt_batch(
+            train_prompt_texts,
+            train_expected_answers,
+            rollout_cursor,
+            rollout_batch_size,
+        )
 
         server_process, server_log_path = start_rollout_server(args, model_path, args.output_dir, port)
         try:
@@ -330,8 +441,8 @@ def main() -> None:
             run_rollout_phase(
                 base_url=base_url,
                 checkpoint_path=current_checkpoint,
-                prompt_texts=prompt_texts,
-                expected_answers=expected_answers,
+                prompt_texts=rollout_prompts,
+                expected_answers=rollout_answers,
                 reward_fn_name=reward_fn_name,
                 step=step,
                 args=args,
@@ -344,12 +455,12 @@ def main() -> None:
             args=args,
             model_path=model_path,
             input_checkpoint=current_checkpoint,
-            output_checkpoint=next_checkpoint,
+            output_checkpoint=current_policy_checkpoint,
             rollout_path=rollout_path,
             metrics_path=metrics_path,
             step=step,
         )
-        current_checkpoint = next_checkpoint
+        current_checkpoint = current_policy_checkpoint
 
         print(
             f"loss={metrics['loss']:.4f} "
@@ -363,19 +474,63 @@ def main() -> None:
         )
         if metrics.get("train_micro_batch_size", 0) > 0:
             print(f"train_micro_batch_size={metrics['train_micro_batch_size']}")
-        for batch in metrics.get("batches", []):
+        rollout_report = metrics.get("rollout")
+        if rollout_report:
             print(
-                f"  rollout_batch={batch['batch_idx']} "
-                f"reward={batch['reward_mean']:+.3f} "
-                f"kl={batch['training_rollout_kl_div']:.6f} "
-                f"entropy={batch['entropy']:.4f}"
+                f"  rollout reward={rollout_report['reward_mean']:+.3f} "
+                f"kl={rollout_report['training_rollout_kl_div']:.6f} "
+                f"entropy={rollout_report['entropy']:.4f}"
             )
         print(f"sample={metrics['sample_completion'][:120]}...")
         print(f"step_report={metrics_path}")
 
+        should_eval = (
+            args.eval_every_n_steps > 0
+            and (step + 1) % args.eval_every_n_steps == 0
+            and reward_fn_name == "math_reward_function"
+            and len(test_prompt_texts) > 0
+        )
+        if should_eval:
+            eval_server_process, eval_server_log_path = start_rollout_server(
+                args,
+                model_path,
+                args.output_dir,
+                port,
+            )
+            try:
+                wait_for_server_process(base_url, eval_server_process, eval_server_log_path)
+                eval_report = run_eval_phase(
+                    base_url=base_url,
+                    checkpoint_path=current_checkpoint,
+                    prompt_texts=test_prompt_texts,
+                    expected_answers=test_expected_answers,
+                    args=args,
+                    eval_path=eval_path,
+                    step=step,
+                )
+            finally:
+                stop_rollout_server(base_url, eval_server_process)
+
+            archived_checkpoint = os.path.join(
+                checkpoint_dir,
+                f"eval_step_{step + 1:04d}.safetensors",
+            )
+            shutil.copy2(current_checkpoint, archived_checkpoint)
+            writer.add_scalar("eval/pass_at_1", eval_report["pass_at_1"], step)
+            writer.add_scalar("eval/pass_at_1_stderr", eval_report["pass_at_1_stderr"], step)
+            writer.add_scalar("eval/any_correct_rate", eval_report["any_correct_rate"], step)
+            print(
+                f"eval_pass@1={eval_report['pass_at_1']:.4f} "
+                f"+/- {eval_report['pass_at_1_stderr']:.4f} "
+                f"any_correct={eval_report['any_correct_rate']:.4f}"
+            )
+            print(f"eval_report={eval_path}")
+            print(f"saved_checkpoint={archived_checkpoint}")
+
     print("\nTraining complete.")
     print(f"Latest checkpoint: {current_checkpoint}")
     print(f"TensorBoard: tensorboard --logdir={args.logdir}")
+    writer.close()
 
 
 if __name__ == "__main__":
