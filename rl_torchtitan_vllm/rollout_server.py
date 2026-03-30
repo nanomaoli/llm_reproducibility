@@ -4,6 +4,7 @@ import argparse
 import gc
 import json
 import os
+import shutil
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -41,7 +42,9 @@ class RolloutEngine:
         max_model_len: int,
     ) -> None:
         self.base_model_path = model_path
-        self.temp_model_dir = os.path.abspath(os.path.join(temp_checkpoint_dir, "vllm_temp_model"))
+        self.temp_model_dir = os.path.abspath(
+            os.path.join(temp_checkpoint_dir, f"vllm_temp_model_{os.getpid()}")
+        )
         self.tensor_parallel_size = tensor_parallel_size
         self.gpu_memory_utilization = gpu_memory_utilization
         self.max_model_len = max_model_len
@@ -52,6 +55,8 @@ class RolloutEngine:
             self.base_model_path,
             trust_remote_code=True,
         )
+        if os.path.exists(self.temp_model_dir):
+            shutil.rmtree(self.temp_model_dir)
         prepare_vllm_model_dir(self.base_model_path, self.temp_model_dir)
 
     def _ensure_vllm_imported(self) -> None:

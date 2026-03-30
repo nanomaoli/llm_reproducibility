@@ -6,7 +6,6 @@ import socket
 import subprocess
 import sys
 import time
-import tempfile
 import json
 import math
 import shutil
@@ -43,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cache-dir", default="./models")
     parser.add_argument("--output-dir", default="./converted")
     parser.add_argument("--run-dir", default="./outputs/rl_fsdp_vllm")
+    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--num-steps", type=int, default=100)
     parser.add_argument("--group-size", type=int, default=8)
     parser.add_argument("--rollout-batch-size", type=int, default=16)
@@ -64,6 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vllm-gpu-memory-utilization", type=float, default=0.2)
     parser.add_argument("--max-model-len", type=int, default=2048)
     parser.add_argument("--logdir", default="./outputs/rl_training")
+    parser.add_argument("--show-train-worker-logs", action="store_true")
     return parser.parse_args()
 
 
@@ -123,6 +124,8 @@ def start_rollout_server(
     model_path: str,
     output_dir: str,
     port: int,
+    step: int,
+    phase: str,
 ) -> tuple[subprocess.Popen[bytes], str]:
     rollout_env = os.environ.copy()
     rollout_env["CUDA_VISIBLE_DEVICES"] = args.rollout_gpus
@@ -130,12 +133,7 @@ def start_rollout_server(
         rollout_env.pop(key, None)
     rollout_env.update(collect_patch_env(os.environ))
     log_dir = ensure_dir(Path(args.run_dir) / "server_logs")
-    log_path = tempfile.NamedTemporaryFile(
-        prefix="rollout_server_",
-        suffix=".log",
-        dir=log_dir,
-        delete=False,
-    ).name
+    log_path = str(Path(log_dir) / f"{phase}_step_{step + 1:04d}.log")
 
     tp_size = len([gpu for gpu in args.rollout_gpus.split(",") if gpu.strip()])
     command = [
@@ -216,6 +214,22 @@ def build_prompt_groups(
             }
         )
     return groups
+
+
+def infer_resume_step(run_dir: str) -> int:
+    metrics_dir = Path(run_dir) / "metrics"
+    if not metrics_dir.exists():
+        return 0
+
+    max_step = -1
+    for metrics_file in metrics_dir.glob("step_*.json"):
+        stem = metrics_file.stem
+        try:
+            step = int(stem.split("_")[-1])
+        except ValueError:
+            continue
+        max_step = max(max_step, step)
+    return max_step + 1
 
 
 def run_rollout_phase(
@@ -320,6 +334,8 @@ def run_train_phase(
     train_env.update(collect_patch_env(os.environ))
     nproc_per_node = len([gpu for gpu in args.train_gpus.split(",") if gpu.strip()])
     master_port = find_free_port()
+    train_log_dir = ensure_dir(Path(args.run_dir) / "train_logs")
+    train_log_path = str(Path(train_log_dir) / f"step_{step + 1:04d}.log")
     command = [
         sys.executable,
         "-m",
@@ -355,7 +371,25 @@ def run_train_phase(
     if args.use_vllm_compat or detect_vllm_compat_mode():
         command.append("--use-vllm-compat")
 
-    subprocess.run(command, env=train_env, check=True)
+    if args.show_train_worker_logs:
+        subprocess.run(command, env=train_env, check=True)
+    else:
+        with open(train_log_path, "w", encoding="utf-8") as log_handle:
+            completed = subprocess.run(
+                command,
+                env=train_env,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+            )
+        if completed.returncode != 0:
+            log_text = ""
+            if os.path.exists(train_log_path):
+                with open(train_log_path, "r", encoding="utf-8", errors="replace") as handle:
+                    log_text = handle.read().strip()
+            raise RuntimeError(
+                f"train worker failed with code {completed.returncode}.\n"
+                f"log file: {train_log_path}\n{log_text}"
+            )
     return load_json(metrics_path)
 
 
@@ -366,8 +400,27 @@ def main() -> None:
     ensure_dir(args.logdir)
 
     writer = SummaryWriter(args.logdir)
+    current_policy_checkpoint = os.path.join(args.run_dir, "current_policy.safetensors")
+    start_step = 0
 
-    if args.model_path and args.checkpoint_path:
+    if args.resume:
+        if not os.path.exists(current_policy_checkpoint):
+            raise FileNotFoundError(
+                f"--resume was set but no current policy checkpoint was found at "
+                f"{current_policy_checkpoint}"
+            )
+
+        if args.model_path:
+            model_path = args.model_path
+        else:
+            _, model_path = download_and_convert_model(
+                model_name=args.model_name,
+                cache_dir=args.cache_dir,
+                output_dir=args.output_dir,
+            )
+        current_checkpoint = current_policy_checkpoint
+        start_step = infer_resume_step(args.run_dir)
+    elif args.model_path and args.checkpoint_path:
         model_path = args.model_path
         current_checkpoint = args.checkpoint_path
     else:
@@ -415,10 +468,13 @@ def main() -> None:
     )
     print(f"Patch env: {format_patch_env(os.environ)}")
     rollout_batch_size = max(1, min(args.rollout_batch_size, len(train_prompt_texts)))
-    rollout_cursor = 0
-    current_policy_checkpoint = os.path.join(args.run_dir, "current_policy.safetensors")
+    rollout_cursor = (start_step * rollout_batch_size) % max(1, len(train_prompt_texts))
+    if args.resume:
+        print(
+            f"Resuming from step {start_step} using checkpoint {current_policy_checkpoint}"
+        )
 
-    for step in tqdm(list(range(args.num_steps))):
+    for step in tqdm(list(range(start_step, args.num_steps))):
         print(f"\n=== Step {step + 1}/{args.num_steps} ===")
         rollout_dir = ensure_dir(Path(args.run_dir) / "rollouts")
         checkpoint_dir = ensure_dir(Path(args.run_dir) / "checkpoints")
@@ -435,7 +491,14 @@ def main() -> None:
             rollout_batch_size,
         )
 
-        server_process, server_log_path = start_rollout_server(args, model_path, args.output_dir, port)
+        server_process, server_log_path = start_rollout_server(
+            args,
+            model_path,
+            args.output_dir,
+            port,
+            step,
+            "rollout",
+        )
         try:
             wait_for_server_process(base_url, server_process, server_log_path)
             run_rollout_phase(
@@ -496,6 +559,8 @@ def main() -> None:
                 model_path,
                 args.output_dir,
                 port,
+                step,
+                "eval",
             )
             try:
                 wait_for_server_process(base_url, eval_server_process, eval_server_log_path)

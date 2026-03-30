@@ -72,6 +72,22 @@ def atomic_write_json(path: str | os.PathLike[str], payload: dict[str, Any]) -> 
     os.replace(temp_path, path)
 
 
+def atomic_save_safetensors(
+    tensors: dict[str, torch.Tensor],
+    path: str | os.PathLike[str],
+) -> None:
+    path = Path(path)
+    ensure_dir(path.parent)
+    with tempfile.NamedTemporaryFile(
+        suffix=path.suffix or ".safetensors",
+        dir=path.parent,
+        delete=False,
+    ) as handle:
+        temp_path = handle.name
+    save_file(tensors, temp_path)
+    os.replace(temp_path, path)
+
+
 def load_json(path: str | os.PathLike[str]) -> dict[str, Any]:
     with open(path, "r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -135,7 +151,7 @@ def download_and_convert_model(
     print("Converting weights to TorchTitan format...")
     titan_state = vllm_to_torchtitan(model_path)
     titan_checkpoint_path = os.path.join(output_dir, "qwen3_torchtitan.safetensors")
-    save_file(titan_state, titan_checkpoint_path)
+    atomic_save_safetensors(titan_state, titan_checkpoint_path)
     print(f"  Saved TorchTitan weights to: {titan_checkpoint_path}")
     return titan_checkpoint_path, model_path
 
@@ -223,14 +239,14 @@ def write_vllm_weights(
                 key: tensor.to(torch.bfloat16) if tensor.dtype == torch.float32 else tensor
                 for key, tensor in payload.items()
             }
-            save_file(cast_payload, shard_file)
+            atomic_save_safetensors(cast_payload, shard_file)
         return
 
     cast_state = {
         key: tensor.to(torch.bfloat16) if tensor.dtype == torch.float32 else tensor
         for key, tensor in vllm_state.items()
     }
-    save_file(cast_state, checkpoint_output_path)
+    atomic_save_safetensors(cast_state, checkpoint_output_path)
 
 
 def extract_numeric_answer(text: str) -> str | None:

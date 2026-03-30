@@ -55,7 +55,7 @@ def compatible_mode_is_enabled():
         is_overridden = int(val) != 0
     except ValueError:
         is_overridden = False
-    if is_overridden:
-        if not check_invariant_compat():
-            print("TP invariance and batch invariance must be enabled under train-inference alignment mode")
+    # if is_overridden:
+    #     if not check_invariant_compat():
+    #         print("TP invariance and batch invariance must be enabled under train-inference alignment mode")
     return is_overridden

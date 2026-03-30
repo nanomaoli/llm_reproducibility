@@ -13,7 +13,6 @@ apply_patches()
 
 import torch
 import torch.distributed as dist
-from safetensors.torch import save_file
 from torch.distributed.fsdp import (
     FullStateDictConfig,
     FullyShardedDataParallel as FSDP,
@@ -29,6 +28,7 @@ if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from rl_torchtitan_vllm.common import (
+    atomic_save_safetensors,
     atomic_write_json,
     compute_grpo_advantages,
     compute_grpo_advantages_stable,
@@ -292,7 +292,7 @@ def main() -> None:
 
     if rank == 0:
         Path(args.output_checkpoint).parent.mkdir(parents=True, exist_ok=True)
-        save_file(full_state, args.output_checkpoint)
+        atomic_save_safetensors(full_state, args.output_checkpoint)
 
     dist.barrier()
 
