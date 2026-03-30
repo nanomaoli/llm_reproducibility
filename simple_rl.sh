@@ -1,0 +1,5 @@
+export VLLM_ATTENTION_BACKEND="TRITON_ATTN"
+export VLLM_BATCH_INVARIANT='1'
+export VLLM_TP_INVARIANT='1'
+export ALIGN_TRAIN_INFERENCE='1'
+python simple_rl.py

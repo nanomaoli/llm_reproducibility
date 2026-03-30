@@ -17,10 +17,13 @@ This demonstrates:
 7. Optional real dataset support (GSM8K math dataset)
 """
 
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "torchtitan"))
+
 from src.patch import apply_patches
 apply_patches()
 
-import os
 import re
 import math
 import torch
@@ -165,9 +168,9 @@ class VLLMRolloutEngine:
             self.llm = LLM(
                 model=self.temp_model_dir,
                 trust_remote_code=False,
-                max_model_len=2048,
+                max_model_len=4096,
                 dtype="bfloat16",
-                gpu_memory_utilization=0.3,  # Reduced from 0.5
+                gpu_memory_utilization=0.2,  # Reduced from 0.5
                 tensor_parallel_size=torch.cuda.device_count(),
                 seed=42,  # Fixed seed for determinism
                 enable_prefix_caching=False,
@@ -944,7 +947,7 @@ def rl_update_step(
 
         # Accumulate loss (will be averaged later)
         loss = loss / num_rollout_batches
-        loss.backward()
+        # loss.backward()
         total_loss += loss.item()
 
         # Track metrics
@@ -957,7 +960,7 @@ def rl_update_step(
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
     # Update weights
-    optimizer.step()
+    # optimizer.step()
 
     # Aggregate metrics across batches
     avg_reward = sum(all_rewards) / len(all_rewards)
@@ -1064,7 +1067,7 @@ def main():
     use_real_dataset = (
         True  # Set to True to use GSM8K dataset (requires: pip install datasets)
     )
-    num_dataset_samples = 5  # Number of prompts from dataset
+    num_dataset_samples = 2  # Number of prompts from dataset
 
     # Check if batch invariance is enabled
     from src.utils import batch_invariant_is_enabled, tp_invariant_is_enabled, compatible_mode_is_enabled
@@ -1174,7 +1177,7 @@ def main():
             optimizer,
             expected_answers=expected_answers,
             group_size=group_size,
-            max_new_tokens=20 if not use_real_dataset else 100,
+            max_new_tokens=20 if not use_real_dataset else 2048,
             temperature=1.0,
             use_vllm_compat=use_vllm_compat,
             num_rollout_batches=num_rollout_batches,
