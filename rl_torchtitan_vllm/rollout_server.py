@@ -72,6 +72,8 @@ class RolloutEngine:
             return
 
         self._ensure_vllm_imported()
+        if not os.path.exists(self.temp_model_dir):
+            prepare_vllm_model_dir(self.base_model_path, self.temp_model_dir)
         write_vllm_weights(checkpoint_path, self.temp_model_dir)
         if self.llm is None:
             self.llm = self._llm_cls(
@@ -89,6 +91,10 @@ class RolloutEngine:
         else:
             self.llm.collective_rpc("reload_weights")
         self.loaded_checkpoint = checkpoint_path
+
+    def cleanup_model_dir(self) -> None:
+        if os.path.exists(self.temp_model_dir):
+            shutil.rmtree(self.temp_model_dir)
 
     def generate(
         self,
@@ -139,22 +145,23 @@ class RolloutEngine:
             "prompt_token_ids": prompt_token_ids,
         }
 
-    def unload(self) -> None:
-        if self.llm is None:
-            return
+    def unload(self, remove_model_dir: bool = False) -> None:
+        if self.llm is not None:
+            executor = getattr(getattr(self.llm, "llm_engine", None), "model_executor", None)
+            if executor is not None and hasattr(executor, "shutdown"):
+                try:
+                    executor.shutdown()
+                except Exception:
+                    pass
 
-        executor = getattr(getattr(self.llm, "llm_engine", None), "model_executor", None)
-        if executor is not None and hasattr(executor, "shutdown"):
-            try:
-                executor.shutdown()
-            except Exception:
-                pass
+            self.llm = None
+            self.loaded_checkpoint = None
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
-        self.llm = None
-        self.loaded_checkpoint = None
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if remove_model_dir:
+            self.cleanup_model_dir()
 
 
 class JsonHandler(BaseHTTPRequestHandler):
@@ -212,7 +219,7 @@ class JsonHandler(BaseHTTPRequestHandler):
                     return
 
                 if self.path == "/shutdown":
-                    self.engine.unload()
+                    self.engine.unload(remove_model_dir=True)
                     self._send_json(200, {"ok": True})
                     threading.Thread(target=self.server.shutdown, daemon=True).start()
                     return
@@ -261,7 +268,10 @@ def main() -> None:
 
     server = ReusableThreadingHTTPServer((args.host, args.port), JsonHandler)
     print(f"rollout server listening on http://{args.host}:{args.port}", flush=True)
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        JsonHandler.engine.unload(remove_model_dir=True)
 
 
 if __name__ == "__main__":
