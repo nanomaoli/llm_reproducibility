@@ -101,6 +101,17 @@ Following [spirl](https://github.com/teja-rao/spirl), we use vLLM for inference 
 [CUDA_VISIBLE_DEVICES] VLLM_BATCH_INVARIANT=1 VLLM_TP_INVARIANT=1 ALIGN_TRAIN_INFERENCE=1 python simple_rl.py
 ```
 
+**We now also support running the training engine on multiple GPUs, enabling larger-scale RL training.** To launch the FSDP-based multi-GPU RL training setup with TBIK, run:
+
+```bash
+bash fsdp_rl_tbik.sh
+```
+
+To compare against other settings, such as the baseline or BIO, run:
+```bash
+bash fsdp_rl_baseline.sh
+bash fsdp_rl_bio.sh
+```
 ## Evaluating Reproducibility of Reasoning
 To run the evaluation on the full dataset, please refer to [./evaluation](https://github.com/nanomaoli/llm_reproducibility/tree/main/evaluation)
 

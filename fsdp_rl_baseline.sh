@@ -8,7 +8,7 @@ python -m rl_torchtitan_vllm.driver \
   --use-real-dataset \
   --max-model-len 40960 \
   --vllm-port 12346 \
-  --run-dir "/mlx_devbox/users/zhangziyang.648/playground/llm_reproducibility/outputs/rl_fsdp_baseline_beta0.5" \
+  --run-dir "outputs/rl_fsdp_tbik_beta0.5" \
   --max-new-tokens 512 \
   --num-train-samples 256 \
   --num-test-samples 64 \
