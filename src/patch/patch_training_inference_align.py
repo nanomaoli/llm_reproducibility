@@ -619,3 +619,10 @@ def patch_training_inference_align():
     patch_triton_attn()
     patch_vllm_rotary_embedding()
     print("Successfully patched vLLM to align with TorchTitan\n")
+
+
+def patch_training_baseline():
+    patch_kernel_unified_attention_2d()
+    patch_unified_triton_attn()
+    patch_triton_attn()
+    patch_vllm_rotary_embedding()
